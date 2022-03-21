@@ -130,7 +130,11 @@ func (uc *Parking) ParkVehicle(ctx context.Context, platNo string) error {
 }
 
 func (uc *Parking) LeaveParkingLot(ctx context.Context, platNo string) error {
-	err := uc.ParkingDB.LeaveParkingLot(ctx, platNo)
+	parkingLot, err := uc.ParkingDB.GetParkingLotByPlatNumber(ctx, platNo)
+	if err != nil {
+		return errors.Wrap(err, "Database.GetParkingLotByPlatNumber")
+	}
+	err = uc.ParkingDB.LeaveParkingLot(ctx, parkingLot)
 	if err != nil {
 		return errors.Wrap(err, "Database.LeaveParkingLot")
 	}

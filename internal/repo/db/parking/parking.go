@@ -11,7 +11,7 @@ import (
 type ParkingLotDB interface {
 	GetList(ctx context.Context) (listTrxParking []*parkingdomain.TrxParking, err error)
 	ParkVehicle(ctx context.Context, trxParking *parkingdomain.TrxParking) error
-	LeaveParkingLot(ctx context.Context, platNo string) error
+	LeaveParkingLot(ctx context.Context, parkingLot parkingdomain.MapParking) error
 	GetParkingLotByPlatNumber(ctx context.Context, platNo string) (parkingdomain.MapParking, error)
 	GetEmptyParkingLot(ctx context.Context) (parkingdomain.MapParking, error)
 	GetParkingHistoryByDate(ctx context.Context, startDate, endDate time.Time) ([]*parkingdomain.HstParking, error)
@@ -49,14 +49,35 @@ func (db *ParkingDB) ParkVehicle(ctx context.Context, trxParking *parkingdomain.
 	return nil
 }
 
-func (db *ParkingDB) LeaveParkingLot(ctx context.Context, platNo string) error {
-	tx := db.Conn.DB.Table(TblTrxParking).Delete(&parkingdomain.TrxParking{}, "plat_no = ?", platNo)
+func (db *ParkingDB) LeaveParkingLot(ctx context.Context, parkingLot parkingdomain.MapParking) error {
+	tx := db.Conn.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
 
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	tx = db.Conn.DB.Table(TblTrxParking).Delete(&parkingdomain.TrxParking{}, "plat_no = ?", parkingLot.PlatNo)
 	if tx.Error != nil {
+		tx.Rollback()
 		return tx.Error
 	}
 
-	return nil
+	tx = db.Conn.DB.Table(TblHstParking).Create(&parkingdomain.HstParking{
+		PlatNo:           parkingLot.PlatNo,
+		SlotNumber:       parkingLot.ID,
+		RegistrationDate: time.Now(),
+	})
+	if tx.Error != nil {
+		tx.Rollback()
+		return tx.Error
+	}
+
+	return tx.Commit().Error
 }
 
 func (db *ParkingDB) GetParkingLotByPlatNumber(ctx context.Context, platNo string) (data parkingdomain.MapParking, err error) {
